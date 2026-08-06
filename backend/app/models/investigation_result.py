@@ -14,16 +14,20 @@ class InvestigationResult(Base):
         nullable=False
     )
 
+    # 예: Low, Medium, High
     risk_level = Column(
         String(20),
         nullable=False
     )
 
+    # 매우 중요
+    # 판단 근거를 저장함
     evidence = Column(
         Text,
         nullable=False
     )
 
+    # LLM이 생성한 최종 설명이 저장됨
     ai_reasoning = Column(
         Text,
         nullable=False
