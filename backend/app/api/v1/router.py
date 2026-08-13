@@ -1,10 +1,11 @@
 """
-API v1 Router 통합
+API v1 라우터 통합
 """
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import health
+from app.api.v1.endpoints import contacts, health, patients, sop
+
 
 api_router = APIRouter()
 
@@ -13,3 +14,22 @@ api_router.include_router(
     prefix="/health",
     tags=["Health"],
 )
+
+api_router.include_router(
+    patients.router,
+    prefix="/patients",
+    tags=["Patients"],
+)
+
+api_router.include_router(
+    contacts.router,
+    prefix="/contacts",
+    tags=["Contacts"],
+)
+
+api_router.include_router(
+    sop.router,
+    prefix="/sop-documents",
+    tags=["SOP Documents"],
+)
+

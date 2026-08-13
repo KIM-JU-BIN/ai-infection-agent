@@ -9,7 +9,7 @@ from math import sqrt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.access_log import AccessLog
-from backend.app.repositories.access_log_repository import AccessLogRepository
+from app.repositories.access_log_repository import AccessLogRepository
 from app.schemas.access_log import ContactCandidate
 
 

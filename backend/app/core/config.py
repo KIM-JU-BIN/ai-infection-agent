@@ -88,6 +88,23 @@ class Settings(BaseSettings):
         default=False,
         description="SQL 로그 출력 여부",
     )
+    
+    OPENAI_API_KEY: str | None = Field(
+    default=None,
+    description="OpenAI API 키",
+    )
+
+    EMBEDDING_MODEL: str = Field(
+        default="text-embedding-3-small",
+        description="임베딩 모델명",
+    )
+
+    EMBEDDING_DIMENSION: int = Field(
+        default=1536,
+        ge=1,
+        description="임베딩 벡터 차원",
+    )
+
 
     @field_validator("API_V1_PREFIX")
     @classmethod

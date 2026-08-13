@@ -1,11 +1,13 @@
 """
-감염관리 SOP 문서 ORM 모델
+감염관리 지침서 ORM 모델
 """
 
 from datetime import datetime
+from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, Index, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -13,7 +15,8 @@ from app.db.session import Base
 
 class SopDocument(Base):
     """
-    RAG 검색용 SOP 청크
+    RAG 검색용 지침서 청크
+    내부 SOP, KDCA, CDC 등 출처를 함께 저장
     """
 
     __tablename__ = "sop_documents"
@@ -21,7 +24,7 @@ class SopDocument(Base):
     id: Mapped[int] = mapped_column(
         primary_key=True,
         autoincrement=True,
-        comment="SOP 문서 PK",
+        comment="지침서 PK",
     )
 
     document_code: Mapped[str] = mapped_column(
@@ -35,6 +38,20 @@ class SopDocument(Base):
         String(300),
         nullable=False,
         comment="문서 제목",
+    )
+
+    source_type: Mapped[str] = mapped_column(
+        String(50),
+        index=True,
+        nullable=False,
+        comment="문서 출처 유형",
+    )
+
+    authority: Mapped[str | None] = mapped_column(
+        String(100),
+        index=True,
+        nullable=True,
+        comment="발행 기관",
     )
 
     disease_type: Mapped[str | None] = mapped_column(
@@ -65,13 +82,19 @@ class SopDocument(Base):
     source_path: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
-        comment="원본 파일 경로",
+        comment="원본 경로 또는 URL",
+    )
+
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="추가 메타데이터",
     )
 
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(1536),
         nullable=True,
-        comment="문서 임베딩 벡터",
+        comment="임베딩 벡터",
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -97,6 +120,21 @@ class SopDocument(Base):
             unique=True,
         ),
         Index(
+            "ix_sop_documents_source_disease",
+            "source_type",
+            "disease_type",
+        ),
+        Index(
+            "ix_sop_documents_authority_disease",
+            "authority",
+            "disease_type",
+        ),
+        Index(
+            "ix_sop_documents_metadata_json_gin",
+            "metadata_json",
+            postgresql_using="gin",
+        ),
+        Index(
             "ix_sop_documents_embedding_hnsw",
             "embedding",
             postgresql_using="hnsw",
@@ -104,3 +142,4 @@ class SopDocument(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )
+
