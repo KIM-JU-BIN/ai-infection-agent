@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exceptions import AppError, DatabaseConnectionError
 from app.core.logging import configure_logging, get_logger
@@ -28,7 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
 
     logger.info(
-        "앱 시작",
+        "앱 시작.",
         extra={
             "project_name": settings.PROJECT_NAME,
             "version": settings.VERSION,
@@ -40,18 +41,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await check_database_connection()
         app.state.is_ready = True
 
-        logger.info("앱 시작 완료")
+        logger.info("앱 시작 완료.")
 
         yield
 
     except DatabaseConnectionError:
         app.state.is_ready = False
-        logger.exception("DB 연결 실패로 앱 시작 중단")
+        logger.exception("DB 연결 실패로 앱 시작 중단.")
         raise
 
     except Exception:
         app.state.is_ready = False
-        logger.exception("앱 시작 중 알 수 없는 오류")
+        logger.exception("앱 시작 중 알 수 없는 오류.")
         raise
 
     finally:
@@ -59,10 +60,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         try:
             await close_database_connection()
-            logger.info("앱 종료 완료")
+            logger.info("앱 종료 완료.")
 
         except Exception:
-            logger.exception("앱 종료 중 오류 발생")
+            logger.exception("앱 종료 중 오류 발생.")
 
 
 def create_app() -> FastAPI:
@@ -74,8 +75,8 @@ def create_app() -> FastAPI:
         title=settings.PROJECT_NAME,
         version=settings.VERSION,
         description=(
-            "현장 중심 AI 감염관리 조사 에이전트 백엔드 API "
-            "FastAPI, PostgreSQL, pgvector, LangGraph 기반 서버입니다. "
+            "현장 중심 AI 감염관리 조사 에이전트 백엔드 API. "
+            "FastAPI, PostgreSQL, pgvector, LangGraph 기반 서버입니다."
         ),
         debug=settings.DEBUG,
         lifespan=lifespan,
@@ -104,7 +105,7 @@ def configure_middlewares(app: FastAPI) -> None:
         allow_headers=["*"],
     )
 
-    logger.info("CORS 설정 완료")
+    logger.info("CORS 설정 완료.")
 
 
 def configure_exception_handlers(app: FastAPI) -> None:
@@ -122,7 +123,7 @@ def configure_exception_handlers(app: FastAPI) -> None:
         """
 
         logger.warning(
-            "앱 예외 발생",
+            "앱 예외 발생.",
             extra={
                 "path": request.url.path,
                 "method": request.method,
@@ -151,7 +152,7 @@ def configure_exception_handlers(app: FastAPI) -> None:
         """
 
         logger.warning(
-            "요청 검증 실패",
+            "요청 검증 실패.",
             extra={
                 "path": request.url.path,
                 "method": request.method,
@@ -179,7 +180,7 @@ def configure_exception_handlers(app: FastAPI) -> None:
         """
 
         logger.exception(
-            "서버 내부 오류",
+            "서버 내부 오류.",
             extra={
                 "path": request.url.path,
                 "method": request.method,
@@ -198,8 +199,13 @@ def configure_exception_handlers(app: FastAPI) -> None:
 
 def configure_routes(app: FastAPI) -> None:
     """
-    기본 라우트 등록
+    라우트 등록
     """
+
+    app.include_router(
+        api_router,
+        prefix=settings.API_V1_PREFIX,
+    )
 
     @app.get(
         "/",
@@ -208,7 +214,7 @@ def configure_routes(app: FastAPI) -> None:
     )
     async def root() -> dict[str, str]:
         """
-        서버 기본 정보
+        서버 기본 정보.
         """
 
         return {
@@ -217,23 +223,7 @@ def configure_routes(app: FastAPI) -> None:
             "status": "running",
         }
 
-    @app.get(
-        "/health",
-        status_code=status.HTTP_200_OK,
-        summary="상태 확인",
-    )
-    async def health_check() -> dict[str, Any]:
-        """
-        서버 상태 확인
-        """
-
-        return {
-            "status": "ok",
-            "service": settings.PROJECT_NAME,
-            "version": settings.VERSION,
-            "environment": settings.ENVIRONMENT,
-        }
-
 
 app: FastAPI = create_app()
+
 

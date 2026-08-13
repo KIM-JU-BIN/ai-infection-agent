@@ -1,8 +1,5 @@
 """
-API v1 Router Aggregator.
-
-v1 하위의 모든 endpoint router를 하나로 묶습니다.
-main.py에서는 이 api_router만 include하면 됩니다.
+API v1 Router 통합
 """
 
 from fastapi import APIRouter
