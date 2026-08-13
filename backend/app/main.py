@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
+from app.api.v1.endpoints import patients
 from app.core.config import settings
 from app.core.exceptions import AppError, DatabaseConnectionError
 from app.core.logging import configure_logging, get_logger
@@ -205,6 +206,12 @@ def configure_routes(app: FastAPI) -> None:
     app.include_router(
         api_router,
         prefix=settings.API_V1_PREFIX,
+    )
+    
+    app.include_router(
+        patients.router, 
+        prefix=f"{settings.API_V1_PREFIX}/patients", 
+        tags=["환자 관리"]
     )
 
     @app.get(
