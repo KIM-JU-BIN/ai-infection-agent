@@ -1,5 +1,6 @@
 """
-공간/위치 ORM 모델
+병원 위치 ORM 모델
+PostGIS 없이 x_coord, y_coord만 사용한다
 """
 
 from datetime import datetime
@@ -13,11 +14,12 @@ from app.db.session import Base
 
 if TYPE_CHECKING:
     from app.db.models.access_log import AccessLog
+    from app.db.models.bed_assignment import BedAssignment
 
 
 class Location(Base):
     """
-    병원 내 공간 정보
+    병원 내 위치/POI
     """
 
     __tablename__ = "locations"
@@ -46,7 +48,7 @@ class Location(Base):
     name: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
-        comment="위치명",
+        comment="장소명",
     )
 
     location_type: Mapped[str] = mapped_column(
@@ -58,7 +60,7 @@ class Location(Base):
     floor: Mapped[str | None] = mapped_column(
         String(30),
         nullable=True,
-        comment="층",
+        comment="층수",
     )
 
     building: Mapped[str | None] = mapped_column(
@@ -115,7 +117,14 @@ class Location(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    
+    bed_assignments: Mapped[list["BedAssignment"]] = relationship(
+        back_populates="location",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
         Index("ix_locations_type_floor", "location_type", "floor"),
+        Index("ix_locations_xy", "x_coord", "y_coord"),
     )

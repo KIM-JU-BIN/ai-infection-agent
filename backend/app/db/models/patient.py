@@ -5,7 +5,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, String, Text, func
+from sqlalchemy import Date, DateTime, String, Text, func, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -14,6 +14,7 @@ from app.db.session import Base
 if TYPE_CHECKING:
     from app.db.models.access_log import AccessLog
     from app.db.models.emr_record import EmrRecord
+    from app.db.models.bed_assignment import BedAssignment
     from app.db.models.investigation_result import InvestigationResult
 
 
@@ -43,6 +44,12 @@ class Patient(Base):
         nullable=False,
         comment="환자명",
     )
+    
+    age: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="나이",
+    )
 
     birth_date: Mapped[date | None] = mapped_column(
         Date,
@@ -67,6 +74,12 @@ class Patient(Base):
         nullable=True,
         comment="주소",
     )
+    
+    current_diagnosis: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+        comment="현재 진단명",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -84,6 +97,12 @@ class Patient(Base):
     )
 
     access_logs: Mapped[list["AccessLog"]] = relationship(
+        back_populates="patient",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    
+    bed_assignments: Mapped[list["BedAssignment"]] = relationship(
         back_populates="patient",
         cascade="all, delete-orphan",
         passive_deletes=True,

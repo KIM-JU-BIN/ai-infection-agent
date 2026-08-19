@@ -1,5 +1,6 @@
 """
 출입 로그 ORM 모델
+RFID 출입 스와이프 로그를 저장한다
 """
 
 from datetime import datetime
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
 class AccessLog(Base):
     """
-    환자 위치 이동/출입 기록
+    환자 출입 로그
     """
 
     __tablename__ = "access_logs"
@@ -47,13 +48,20 @@ class AccessLog(Base):
         DateTime(timezone=True),
         nullable=False,
         index=True,
-        comment="출입 발생 시각",
+        comment="출입 시각",
     )
 
     event_type: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
         comment="이벤트 유형",
+    )
+    
+    direction: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default="IN",
+        comment="출입 방향",
     )
 
     source_system: Mapped[str | None] = mapped_column(
@@ -98,6 +106,12 @@ class AccessLog(Base):
             "ix_access_logs_spacetime",
             "patient_id",
             "location_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_access_logs_location_direction_time",
+            "location_id",
+            "direction",
             "occurred_at",
         ),
     )
