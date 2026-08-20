@@ -16,6 +16,7 @@ from app.api.v1.endpoints import patients
 from app.core.config import settings
 from app.core.exceptions import AppError, DatabaseConnectionError
 from app.core.logging import configure_logging, get_logger
+from app.core.scheduler import shutdown_scheduler, start_scheduler
 from app.db.session import check_database_connection, close_database_connection
 
 
@@ -41,6 +42,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         await check_database_connection()
         app.state.is_ready = True
+        
+        start_scheduler()
 
         logger.info("앱 시작 완료.")
 
@@ -60,6 +63,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.is_ready = False
 
         try:
+            shutdown_scheduler()
             await close_database_connection()
             logger.info("앱 종료 완료.")
 
