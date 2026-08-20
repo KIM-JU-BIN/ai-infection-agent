@@ -1,6 +1,6 @@
 """
 접촉자 위험도 평가 Service
-접촉자 탐색 + SOP 검색 + LLM JSON 판정을 담당한다
+접촉자 탐색 + SOP 검색 + LLM JSON 판정 + ContactCase 저장을 담당한다
 """
 
 import json
@@ -11,8 +11,9 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import AppError, ResourceNotFoundError
+from app.core.exceptions import AppError
 from app.core.logging import get_logger
+from app.db.models.post_action import ContactCase
 from app.repositories.sop_repository import SopRepository
 from app.llm.embedding_client import EmbeddingClient
 from app.schemas.assessment import (
@@ -23,8 +24,6 @@ from app.schemas.assessment import (
 )
 from app.services.contact_tracing_service import ContactTracingService
 from app.services.patient_service import PatientService
-
-from app.db.models.post_action import ContactCase
 
 
 logger = get_logger(__name__)
@@ -128,6 +127,13 @@ class AssessmentService:
                 for contact in contacts
             ]
 
+            await self._save_contact_cases(
+                index_patient_id=index_patient.id,
+                disease_type=request.disease_type,
+                contacts=contacts,
+                risks=risks,
+            )
+
             return AssessmentResponse(
                 index_patient_id=index_patient.id,
                 index_patient_identifier=index_patient.patient_identifier,
@@ -147,7 +153,7 @@ class AssessmentService:
             contacts_payload=contacts_payload,
             context=context,
         )
-        
+
         await self._save_contact_cases(
             index_patient_id=index_patient.id,
             disease_type=request.disease_type,
@@ -304,13 +310,10 @@ class AssessmentService:
         risks: list[ContactRiskItem],
     ) -> None:
         """
-        AI 위험도 평가 결과를 ContactCase로 저장.
+        AI 위험도 평가 결과를 ContactCase로 저장
         """
 
-        contact_map = {
-            contact.patient_id: contact
-            for contact in contacts
-        }
+        contact_map = {contact.patient_id: contact for contact in contacts}
 
         cases: list[ContactCase] = []
 
@@ -320,34 +323,30 @@ class AssessmentService:
             if contact is None:
                 continue
 
+            risk_level = (
+                risk.risk_level.value
+                if hasattr(risk.risk_level, "value")
+                else str(risk.risk_level)
+            )
+
             cases.append(
                 ContactCase(
                     index_patient_id=index_patient_id,
                     patient_id=risk.contact_id,
                     disease_type=disease_type,
                     contact_type=getattr(contact, "contact_type", None),
-                    risk_level=risk.risk_level.value
-                    if hasattr(risk.risk_level, "value")
-                    else str(risk.risk_level),
+                    risk_level=risk_level,
                     test_status=self._decide_initial_test_status(
-                        risk_level=risk.risk_level.value
-                        if hasattr(risk.risk_level, "value")
-                        else str(risk.risk_level),
+                        risk_level=risk_level,
                     ),
                     sms_sent_status=self._decide_initial_sms_status(
-                        risk_level=risk.risk_level.value
-                        if hasattr(risk.risk_level, "value")
-                        else str(risk.risk_level),
+                        risk_level=risk_level,
                     ),
                     monitoring_status=self._decide_initial_monitoring_status(
-                        risk_level=risk.risk_level.value
-                        if hasattr(risk.risk_level, "value")
-                        else str(risk.risk_level),
+                        risk_level=risk_level,
                     ),
                     case_status=self._decide_initial_case_status(
-                        risk_level=risk.risk_level.value
-                        if hasattr(risk.risk_level, "value")
-                        else str(risk.risk_level),
+                        risk_level=risk_level,
                     ),
                     reason=risk.reason,
                     action_plan=risk.action_plan,
@@ -362,91 +361,93 @@ class AssessmentService:
         self.db.add_all(cases)
         await self.db.flush()
 
+    @staticmethod
+    def _decide_initial_test_status(*, risk_level: str) -> str:
+        """
+        위험도별 초기 검사 상태
+        """
 
-        @staticmethod
-        def _decide_initial_test_status(*, risk_level: str) -> str:
-            """
-            위험도별 초기 검사 상태.
-            """
+        if risk_level in {"HIGH", "MEDIUM"}:
+            return "RECOMMENDED"
 
-            if risk_level in {"HIGH", "MEDIUM"}:
-                return "RECOMMENDED"
+        return "NOT_REQUIRED"
 
-            return "NOT_REQUIRED"
+    @staticmethod
+    def _decide_initial_sms_status(*, risk_level: str) -> str:
+        """
+        위험도별 초기 문자 상태
+        """
 
+        if risk_level in {"HIGH", "MEDIUM"}:
+            return "PENDING"
 
-        @staticmethod
-        def _decide_initial_sms_status(*, risk_level: str) -> str:
-            """
-            위험도별 초기 문자 상태.
-            """
+        return "NOT_NEEDED"
 
-            if risk_level in {"HIGH", "MEDIUM"}:
-                return "PENDING"
+    @staticmethod
+    def _decide_initial_monitoring_status(*, risk_level: str) -> str:
+        """
+        위험도별 초기 모니터링 상태
+        """
 
-            return "NOT_NEEDED"
+        if risk_level in {"HIGH", "MEDIUM", "LOW"}:
+            return "ACTIVE"
 
+        return "NOT_STARTED"
 
-        @staticmethod
-        def _decide_initial_monitoring_status(*, risk_level: str) -> str:
-            """
-            위험도별 초기 모니터링 상태.
-            """
+    @staticmethod
+    def _decide_initial_case_status(*, risk_level: str) -> str:
+        """
+        위험도별 초기 케이스 상태
+        """
 
-            if risk_level in {"HIGH", "MEDIUM", "LOW"}:
-                return "ACTIVE"
+        if risk_level == "HIGH":
+            return "ACTION_REQUIRED"
 
-            return "NOT_STARTED"
+        if risk_level == "MEDIUM":
+            return "MONITORING"
 
+        if risk_level == "LOW":
+            return "MONITORING"
 
-        @staticmethod
-        def _decide_initial_case_status(*, risk_level: str) -> str:
-            """
-            위험도별 초기 케이스 상태.
-            """
+        return "OPEN"
 
-            if risk_level == "HIGH":
-                return "ACTION_REQUIRED"
+    @staticmethod
+    def _build_sop_search_query(disease_type: str) -> str:
+        """
+        SOP 검색 질문 생성
+        """
 
-            if risk_level == "MEDIUM":
-                return "MONITORING"
+        normalized_disease_type = disease_type.strip()
 
-            if risk_level == "LOW":
-                return "MONITORING"
+        if not normalized_disease_type:
+            normalized_disease_type = "감염병"
 
-            return "OPEN"
+        return (
+            f"{normalized_disease_type} 의료기관 감염관리 접촉자 분류 기준 "
+            "노출 시간 동일 병실 동시간대 체류 출입 로그 접촉자 위험도 평가 "
+            "격리 검사 권고 모니터링 보호구 착용"
+        )
 
-                
-        @staticmethod
-        def _build_sop_search_query(disease_type: str) -> str:
-            """
-            SOP 검색 질문 생성
-            """
+    @staticmethod
+    def _build_contacts_payload(contacts: list[Any]) -> list[dict[str, Any]]:
+        """
+        접촉자 정보를 LLM 입력용으로 변환
+        """
 
-            return (
-                f"{disease_type} 의료기관 감염관리 접촉자 분류 기준 "
-                "노출 시간 거리 보호구 착용 격리 검사 위험도 평가"
-            )
-
-        @staticmethod
-        def _build_contacts_payload(contacts: list[Any]) -> list[dict[str, Any]]:
-            """
-            접촉자 정보를 LLM 입력용으로 변환
-            """
-
-            return [
-                {
-                    "contact_id": contact.patient_id,
-                    "contact_identifier": contact.patient_identifier,
-                    "contact_name": contact.patient_name,
-                    "location_id": contact.location_id,
-                    "location_name": contact.location_name,
-                    "occurred_at": contact.occurred_at.isoformat(),
-                    "distance": contact.distance,
-                    "time_diff_minutes": contact.time_diff_minutes,
-                }
-                for contact in contacts
-            ]
+        return [
+            {
+                "contact_id": contact.patient_id,
+                "contact_identifier": contact.patient_identifier,
+                "contact_name": contact.patient_name,
+                "location_id": contact.location_id,
+                "location_name": contact.location_name,
+                "occurred_at": contact.occurred_at.isoformat(),
+                "distance": contact.distance,
+                "time_diff_minutes": contact.time_diff_minutes,
+                "contact_type": getattr(contact, "contact_type", None),
+            }
+            for contact in contacts
+        ]
 
     @staticmethod
     def _build_context(sop_rows: list[tuple[Any, float]]) -> str:
@@ -525,7 +526,12 @@ class AssessmentService:
 [판정 기준]
 - 같은 위치에서 시간 차이가 작을수록 위험도가 높다.
 - 거리 정보가 있으면 가까울수록 위험도가 높다.
+- 같은 병실 재실 접촉은 중요한 위험 근거로 본다.
+- BED_ASSIGNMENT_OVERLAP은 병실 동시 체류 근거다.
+- ACCESS_LOG_OVERLAP은 출입 로그 기반 동선 겹침 근거다.
+- BED_ASSIGNMENT_OVERLAP+ACCESS_LOG_OVERLAP은 병실과 동선이 모두 겹친 강한 근거다.
 - SOP Context의 접촉자 분류, 격리, 검사, 보호구 관련 내용을 우선 적용한다.
 - 근거가 부족하면 LOW로 단정하지 말고 reason에 "근거 부족"을 명시한다.
 - 각 접촉자마다 contact_id, contact_identifier, contact_name, risk_level, reason, action_plan을 반드시 작성한다.
 """.strip()
+

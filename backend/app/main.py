@@ -208,11 +208,6 @@ def configure_routes(app: FastAPI) -> None:
         prefix=settings.API_V1_PREFIX,
     )
     
-    app.include_router(
-        patients.router, 
-        prefix=f"{settings.API_V1_PREFIX}/patients", 
-        tags=["환자 관리"]
-    )
 
     @app.get(
         "/",
