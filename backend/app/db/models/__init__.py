@@ -10,6 +10,8 @@ from app.db.models.investigation_result import InvestigationResult
 from app.db.models.location import Location
 from app.db.models.patient import Patient
 from app.db.models.sop_document import SopDocument
+from app.db.models.post_action import ContactCase, LabTest, VitalSign
+
 
 
 __all__ = [
@@ -20,5 +22,9 @@ __all__ = [
     "Location",
     "Patient",
     "SopDocument",
+    "ContactCase",
+    "LabTest",
+    "VitalSign",
+
 ]
 
