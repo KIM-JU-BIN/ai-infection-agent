@@ -90,8 +90,8 @@ class Settings(BaseSettings):
     )
     
     OPENAI_API_KEY: str | None = Field(
-    default=None,
-    description="OpenAI API 키",
+        default=None,
+        description="OpenAI API 키",
     )
 
     EMBEDDING_MODEL: str = Field(
@@ -104,6 +104,12 @@ class Settings(BaseSettings):
         ge=1,
         description="임베딩 벡터 차원",
     )
+    
+    CHAT_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="채팅 LLM 모델명",
+    )
+
 
 
     @field_validator("API_V1_PREFIX")
