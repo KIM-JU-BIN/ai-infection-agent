@@ -30,7 +30,12 @@ async def assess_patient_contacts(
 
     service = AssessmentService(db)
 
-    return await service.assess_contacts(
+    response = await service.assess_contacts(
         patient_id=patient_id,
         request=request,
     )
+
+    await db.commit()
+
+    return response
+

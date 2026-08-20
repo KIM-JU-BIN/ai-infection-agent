@@ -24,6 +24,8 @@ from app.schemas.assessment import (
 from app.services.contact_tracing_service import ContactTracingService
 from app.services.patient_service import PatientService
 
+from app.db.models.post_action import ContactCase
+
 
 logger = get_logger(__name__)
 
@@ -144,6 +146,13 @@ class AssessmentService:
             index_patient_id=index_patient.id,
             contacts_payload=contacts_payload,
             context=context,
+        )
+        
+        await self._save_contact_cases(
+            index_patient_id=index_patient.id,
+            disease_type=request.disease_type,
+            contacts=contacts,
+            risks=risks,
         )
 
         return AssessmentResponse(
@@ -286,36 +295,158 @@ class AssessmentService:
                 status_code=502,
             ) from exc
 
-    @staticmethod
-    def _build_sop_search_query(disease_type: str) -> str:
+    async def _save_contact_cases(
+        self,
+        *,
+        index_patient_id: int,
+        disease_type: str,
+        contacts: list[Any],
+        risks: list[ContactRiskItem],
+    ) -> None:
         """
-        SOP 검색 질문 생성
-        """
-
-        return (
-            f"{disease_type} 의료기관 감염관리 접촉자 분류 기준 "
-            "노출 시간 거리 보호구 착용 격리 검사 위험도 평가"
-        )
-
-    @staticmethod
-    def _build_contacts_payload(contacts: list[Any]) -> list[dict[str, Any]]:
-        """
-        접촉자 정보를 LLM 입력용으로 변환
+        AI 위험도 평가 결과를 ContactCase로 저장.
         """
 
-        return [
-            {
-                "contact_id": contact.patient_id,
-                "contact_identifier": contact.patient_identifier,
-                "contact_name": contact.patient_name,
-                "location_id": contact.location_id,
-                "location_name": contact.location_name,
-                "occurred_at": contact.occurred_at.isoformat(),
-                "distance": contact.distance,
-                "time_diff_minutes": contact.time_diff_minutes,
-            }
+        contact_map = {
+            contact.patient_id: contact
             for contact in contacts
-        ]
+        }
+
+        cases: list[ContactCase] = []
+
+        for risk in risks:
+            contact = contact_map.get(risk.contact_id)
+
+            if contact is None:
+                continue
+
+            cases.append(
+                ContactCase(
+                    index_patient_id=index_patient_id,
+                    patient_id=risk.contact_id,
+                    disease_type=disease_type,
+                    contact_type=getattr(contact, "contact_type", None),
+                    risk_level=risk.risk_level.value
+                    if hasattr(risk.risk_level, "value")
+                    else str(risk.risk_level),
+                    test_status=self._decide_initial_test_status(
+                        risk_level=risk.risk_level.value
+                        if hasattr(risk.risk_level, "value")
+                        else str(risk.risk_level),
+                    ),
+                    sms_sent_status=self._decide_initial_sms_status(
+                        risk_level=risk.risk_level.value
+                        if hasattr(risk.risk_level, "value")
+                        else str(risk.risk_level),
+                    ),
+                    monitoring_status=self._decide_initial_monitoring_status(
+                        risk_level=risk.risk_level.value
+                        if hasattr(risk.risk_level, "value")
+                        else str(risk.risk_level),
+                    ),
+                    case_status=self._decide_initial_case_status(
+                        risk_level=risk.risk_level.value
+                        if hasattr(risk.risk_level, "value")
+                        else str(risk.risk_level),
+                    ),
+                    reason=risk.reason,
+                    action_plan=risk.action_plan,
+                    first_exposed_at=getattr(contact, "occurred_at", None),
+                    last_exposed_at=getattr(contact, "occurred_at", None),
+                )
+            )
+
+        if not cases:
+            return
+
+        self.db.add_all(cases)
+        await self.db.flush()
+
+
+        @staticmethod
+        def _decide_initial_test_status(*, risk_level: str) -> str:
+            """
+            위험도별 초기 검사 상태.
+            """
+
+            if risk_level in {"HIGH", "MEDIUM"}:
+                return "RECOMMENDED"
+
+            return "NOT_REQUIRED"
+
+
+        @staticmethod
+        def _decide_initial_sms_status(*, risk_level: str) -> str:
+            """
+            위험도별 초기 문자 상태.
+            """
+
+            if risk_level in {"HIGH", "MEDIUM"}:
+                return "PENDING"
+
+            return "NOT_NEEDED"
+
+
+        @staticmethod
+        def _decide_initial_monitoring_status(*, risk_level: str) -> str:
+            """
+            위험도별 초기 모니터링 상태.
+            """
+
+            if risk_level in {"HIGH", "MEDIUM", "LOW"}:
+                return "ACTIVE"
+
+            return "NOT_STARTED"
+
+
+        @staticmethod
+        def _decide_initial_case_status(*, risk_level: str) -> str:
+            """
+            위험도별 초기 케이스 상태.
+            """
+
+            if risk_level == "HIGH":
+                return "ACTION_REQUIRED"
+
+            if risk_level == "MEDIUM":
+                return "MONITORING"
+
+            if risk_level == "LOW":
+                return "MONITORING"
+
+            return "OPEN"
+
+                
+        @staticmethod
+        def _build_sop_search_query(disease_type: str) -> str:
+            """
+            SOP 검색 질문 생성
+            """
+
+            return (
+                f"{disease_type} 의료기관 감염관리 접촉자 분류 기준 "
+                "노출 시간 거리 보호구 착용 격리 검사 위험도 평가"
+            )
+
+        @staticmethod
+        def _build_contacts_payload(contacts: list[Any]) -> list[dict[str, Any]]:
+            """
+            접촉자 정보를 LLM 입력용으로 변환
+            """
+
+            return [
+                {
+                    "contact_id": contact.patient_id,
+                    "contact_identifier": contact.patient_identifier,
+                    "contact_name": contact.patient_name,
+                    "location_id": contact.location_id,
+                    "location_name": contact.location_name,
+                    "occurred_at": contact.occurred_at.isoformat(),
+                    "distance": contact.distance,
+                    "time_diff_minutes": contact.time_diff_minutes,
+                }
+                for contact in contacts
+            ]
 
     @staticmethod
     def _build_context(sop_rows: list[tuple[Any, float]]) -> str:
