@@ -4,7 +4,7 @@ API v1 라우터 통합
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import assessment, chat, contacts, health, patients, sop
+from app.api.v1.endpoints import assessment, chat, contacts, dashboard, health, patients, sop
 
 
 api_router = APIRouter()
@@ -43,4 +43,11 @@ api_router.include_router(
     assessment.router,
     tags=["Assessment"],
 )
+
+api_router.include_router(
+    dashboard.router,
+    prefix="/dashboard",
+    tags=["Dashboard"],
+)
+
 
