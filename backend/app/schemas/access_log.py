@@ -82,4 +82,5 @@ class ContactCandidate(BaseModel):
     location_name: str = Field(description="공통 위치명")
     occurred_at: datetime = Field(description="접촉 추정 시각")
     distance: float | None = Field(default=None, description="좌표 기반 거리")
-    time_diff_minutes: float = Field(description="기준 환자 로그와의 시간 차이")
+    time_diff_minutes: float = Field(description="기준 환자와의 시간 차이")
+    contact_type: str = Field(description="접촉 유형")
